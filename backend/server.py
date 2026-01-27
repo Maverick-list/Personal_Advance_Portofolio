@@ -11,7 +11,21 @@ from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone, timedelta
 import secrets
-from emergentintegrations.llm.openai import LlmChat, UserMessage
+try:
+    from emergentintegrations.llm.openai import LlmChat, UserMessage
+except ImportError:
+    # Mock classes for local development without the private package
+    class UserMessage:
+        def __init__(self, text):
+            self.text = text
+            
+    class LlmChat:
+        def __init__(self, **kwargs):
+            pass
+        def with_model(self, *args):
+            return self
+        async def send_message(self, message):
+            return "I am a mock AI assistant. The emergentintegrations package is missing locally."
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
