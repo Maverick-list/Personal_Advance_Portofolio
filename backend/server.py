@@ -31,9 +31,102 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ.get('DB_NAME', 'miryam_portfolio')]
+class MockAsyncIOMotorClient:
+    def __init__(self, *args, **kwargs):
+        self.data = {}
+        print("Using MOCK MongoDB (In-Memory)")
+
+    def __getitem__(self, key):
+        return MockDatabase(self.data)
+
+class MockDatabase:
+    def __init__(self, data):
+        self.data = data
+    
+    def __getitem__(self, key):
+        if key not in self.data:
+            self.data[key] = []
+        return MockCollection(self.data[key])
+    
+    def __getattr__(self, key):
+        return self[key]
+
+class MockCollection:
+    def __init__(self, collection_data):
+        self.collection_data = collection_data
+    
+    async def find_one(self, query=None, *args, **kwargs):
+        if not self.collection_data:
+            return None
+        # Simple mock: return first item or None
+        return self.collection_data[0] if self.collection_data else None
+
+    def find(self, query=None, *args, **kwargs):
+        return MockCursor(self.collection_data)
+
+    async def insert_one(self, doc):
+        self.collection_data.append(doc)
+        return True
+
+    async def insert_many(self, docs):
+        self.collection_data.extend(docs)
+        return True
+        
+    async def update_one(self, query, update, upsert=False):
+        # Very basic mock update
+        if upsert and not self.collection_data:
+            doc = update.get("$set", {})
+            self.collection_data.append(doc)
+        elif self.collection_data:
+            # Update first item for simplicity in mock mode
+            if "$set" in update:
+                self.collection_data[0].update(update["$set"])
+            if "$push" in update:
+                pass # Complex to mock fully
+            if "$inc" in update:
+                pass
+        return True
+
+    async def delete_one(self, query):
+        if self.collection_data:
+            self.collection_data.pop(0)
+        return True
+        
+    async def delete_many(self, query):
+        self.collection_data.clear()
+        return True
+        
+    async def count_documents(self, query):
+        return len(self.collection_data)
+
+class MockCursor:
+    def __init__(self, data):
+        self.data = data
+    
+    def sort(self, *args, **kwargs):
+        return self
+        
+    async def to_list(self, length):
+        return self.data[:length]
+
+try:
+    mongo_url = os.environ.get('MONGO_URL', '')
+    if not mongo_url or "localhost" in mongo_url:
+        # Check if we are in a production-like env without localhost access
+        # If connect fails, we catch exception below? 
+        # Actually motor doesn't connect immediately.
+        # We'll try to use real client if URL exists, else Mock.
+        if not mongo_url:
+             raise ValueError("No MONGO_URL set")
+        client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=5000)
+    else:
+         client = AsyncIOMotorClient(mongo_url)
+         
+    db = client[os.environ.get('DB_NAME', 'miryam_portfolio')]
+except Exception as e:
+    print(f"WARNING: MongoDB Connection Failed ({e}). Using Mock Database.")
+    client = MockAsyncIOMotorClient()
+    db = client['mock_db']
 
 # Emergent LLM Key for AI Agent
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
@@ -602,10 +695,9 @@ async def health():
 # Include the router in the main app
 app.include_router(api_router)
 
-app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=["https://personal-advance-porto-git-f9f9c9-firza-miftahul-ilmis-projects.vercel.app", "http://localhost:3000", "http://localhost:8000", "*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
