@@ -692,9 +692,11 @@ async def health():
 # Include the router in the main app
 app.include_router(api_router)
 
+# Configure CORS
+app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["https://personal-advance-porto-git-f9f9c9-firza-miftahul-ilmis-projects.vercel.app", "http://localhost:3000", "http://localhost:8000", "*"],
+    allow_origins=["https://personal-advance-portofolio.vercel.app", "https://personal-advance-porto-git-f9f9c9-firza-miftahul-ilmis-projects.vercel.app", "http://localhost:3000", "http://localhost:8000", "*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
